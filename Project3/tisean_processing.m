@@ -8,6 +8,32 @@ tisean_path = 'C:\Users\Jason\Dropbox\University\Tisean\bin\';
 glass = load('mackey-glass.dat');
 laser = load('santa-fe-laser-a.dat');
 
+% Plot time series data for visualization
+glass_time = 1:length(glass);
+laser_time = 1:length(laser);
+
+figure(1);
+hold on;
+set(gca, 'FontSize', 40);
+h = plot(glass_time, glass);
+h.LineWidth = 2;
+title('Mackey-Glass Time Series');
+xlabel('t');
+ylabel('y(t)');
+xlim([0, length(glass_time)]);
+hold off;
+
+figure(2);
+hold on;
+set(gca, 'FontSize', 40);
+h = plot(laser_time, laser);
+h.LineWidth = 2;
+title('Laser Time Series');
+xlabel('t');
+ylabel('y(t)');
+xlim([0, length(laser_time)]);
+hold off;
+
 % Find mutual information for datasets using TISEAN mutual command
 glass_mi_cmd = sprintf('mutual -o glass_mi.dat mackey-glass.dat');
 laser_mi_cmd = sprintf('mutual -o laser_mi.dat santa-fe-laser-a.dat');
