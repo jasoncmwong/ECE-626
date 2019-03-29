@@ -2,20 +2,35 @@ import tensorflow as tf
 import numpy as np
 import pandas as pd
 import random
+import matplotlib
+import matplotlib.pyplot as plt
 from multiprocessing import Pool, freeze_support, cpu_count
+from functools import partial
 
 #== CONSTANTS ==#
+
+# Validation
 TRAIN_FRAC = 2/3  # Fraction of data going to the training set
 NUM_FOLDS = 5  # Number of folds used in k-fold cross validation
-NUM_EPOCHS = 1000  # Number of epochs of training for the ANN
-NUM_PARAM = 4  # Number of parameters we are optimizing (# units, # layers, learning rate, learning momentum)
 NUM_MEASURES = 3  # Number of performance measures calculated (RMSE, MASE, NMSE)
+
+# Neural network
+NUM_EPOCHS = 10000  # Number of epochs of training for the ANN
 ERR_THRESHOLD = 1e-6  # Maximum error change required to stop the training early
 PATIENCE = 0  # Number of epochs with no improvement after which the training will be stopped
 EARLY_STOPPING = [tf.keras.callbacks.EarlyStopping(monitor='loss',  # Early stopping callback function
                                                    min_delta=ERR_THRESHOLD,
                                                    patience=PATIENCE,
                                                    verbose=True)]
+
+# Hyperparameters
+NUM_PARAM = 4  # Number of parameters we are optimizing (# units, # layers, learning rate, learning momentum)
+MAX_LAYERS = 1  # Maximum number of hidden layers
+MAX_UNITS = 8  # Maximum number of units per hidden layer
+#LEARNING_RATE = np.linspace(0, 1, num=51)  # Learning rate
+#LEARNING_MOMENTUM = np.linspace(0, 1, num=51)  # Learning momentum
+LEARNING_RATE = np.array([0.1])
+LEARNING_MOMENTUM = np.array([0.9])
 
 
 def build_ff_nn(input_dim, learning_rate, learning_momentum, num_layers, num_units):
@@ -42,7 +57,7 @@ def build_ff_nn(input_dim, learning_rate, learning_momentum, num_layers, num_uni
         mlp.add(tf.keras.layers.Dense(num_units, activation=tf.math.sigmoid))
 
     # Add output layer
-    mlp.add(tf.keras.layers.Dense(1, activation=tf.nn.softmax))
+    mlp.add(tf.keras.layers.Dense(1, activation=tf.keras.activations.linear))
 
     mlp.compile(optimizer=tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=learning_momentum),
                 loss='mse',
@@ -91,8 +106,8 @@ def param_cv(lm, max_units, max_layers, learning_rate, train_data, train_targets
                 # Perform k-fold cross validation for the current set of hyperparameters
                 for fold in range(1, NUM_FOLDS+1):
                     # Get current training and test fold indices
-                    train_indices = fold_indices.iloc[:(k*fold_size+leftover)]
-                    test_indices = fold_indices.iloc[(k*fold_size+leftover):((k+1)*fold_size+leftover)]
+                    train_indices = np.ravel(fold_indices.iloc[:(fold*fold_size+leftover)])
+                    test_indices = np.ravel(fold_indices.iloc[(fold*fold_size+leftover):((fold+1)*fold_size+leftover)])
 
                     # Separate inputs and labels into training and test folds
                     train_fold = train_data.iloc[train_indices]
@@ -121,7 +136,7 @@ def param_cv(lm, max_units, max_layers, learning_rate, train_data, train_targets
 
                     diff_targets = np.zeros((1, len(test_fold)-1))  # Differences between two adjacent targets
                     for l in range(len(diff_targets)):
-                        diff_targets[l] = np.abs(test_fold_targets[l+1] - test_fold_targets[l])
+                        diff_targets[l] = np.abs(test_fold_targets.iloc[l+1] - test_fold_targets.iloc[l])
                     mase = mse / (np.sum(diff_targets)/(len(test_fold)-1))
 
                     # Add them to the results data frame
@@ -142,6 +157,32 @@ def param_cv(lm, max_units, max_layers, learning_rate, train_data, train_targets
     return results
 
 
+def training_curve(lr, lm, num_layers, num_units, train_data, train_targets, num_epochs):
+    # Build and train the MLP
+    mlp = build_ff_nn(len(train_data.keys()), lr, lm, num_layers, num_units)
+    history = mlp.fit(train_data.values,
+                      train_targets,
+                      epochs=num_epochs,
+                      verbose=False)
+    tf.keras.backend.clear_session()  # Destroy current TF graph to prevent cluttering from old models
+    return history.history['loss']
+
+
+def plot_training_curves(lr, lm, num_layers, max_units, train_data, train_targets, num_epochs):
+    matplotlib.rcParams.update({'font.size': 30})
+
+    # Get training curves for constant learning rate, learning momentum, number of layers, but variable number of units
+    for i in range(max_units):
+        num_units = i + 1
+        mse_curve = training_curve(lr, lm, num_layers, num_units, train_data, train_targets, num_epochs)
+        plt.plot(range(num_epochs), mse_curve, label='{} unit'.format(num_units))
+    plt.xlabel('Epochs')
+    plt.ylabel('Training Error')
+    plt.title(r'Training Error Curves for $\eta$=0.1 and $\alpha$=0.9')
+    plt.legend()
+    plt.show()
+
+
 def main():
     # Set random seed for testing consistency
     random.seed(0)
@@ -152,22 +193,51 @@ def main():
     laser_data = pd.read_csv('laser_delay.csv', header=None)
 
     # Separate target values from the features
-    glass_labels = glass_data.pop(glass_data.shape[1]-1)
-    laser_labels = laser_data.pop(laser_data.shape[1]-1)
+    glass_targets = glass_data.pop(glass_data.shape[1]-1)
+    laser_targets = laser_data.pop(laser_data.shape[1]-1)
 
     # Split into training and test data sets using a chronologically ordered single-split
     glass_split = round(TRAIN_FRAC*glass_data.shape[0])
     glass_train_data = glass_data.iloc[:glass_split, :]
     glass_test_data = glass_data.drop(glass_train_data.index)
-    glass_train_targets = glass_labels.iloc[glass_train_data.index]
-    glass_test_targets = glass_labels.iloc[glass_test_data.index]
+    glass_train_targets = glass_targets.iloc[glass_train_data.index]
+    glass_test_targets = glass_targets.iloc[glass_test_data.index]
+
+    #plot_training_curves(0.9, 0.1, 1, 8, glass_train_data, glass_train_targets, 10000)
 
     laser_split = round(TRAIN_FRAC*laser_data.shape[0])
     laser_train_data = laser_data.iloc[:laser_split, :]
     laser_test_data = laser_data.drop(laser_train_data.index)
-    laser_train_targets = laser_labels.iloc[laser_train_data.index]
-    laser_test_targets = laser_labels.iloc[laser_test_data.index]
+    laser_train_targets = laser_targets.iloc[laser_train_data.index]
+    laser_test_targets = laser_targets.iloc[laser_test_data.index]
 
+    plot_training_curves(0.9, 0.1, 1, 8, laser_train_data, laser_train_targets, 10000)
+
+    # Perform k-fold cross validation for all parameter combinations, parallelizing over the learning momentum
+    with Pool(cpu_count()) as pool:
+        results = pool.map(partial(param_cv,
+                                   max_units=MAX_UNITS,
+                                   max_layers=MAX_LAYERS,
+                                   learning_rate=LEARNING_RATE,
+                                   train_data=glass_train_data,
+                                   train_targets=glass_train_targets),
+                           LEARNING_MOMENTUM)
+
+    # Convert array of results to a DataFrame
+    glass_ff_results = pd.DataFrame(data=np.vstack(results),
+                                    columns=['Number of units',
+                                             'Number of layers',
+                                             'Learning rate',
+                                             'Learning momentum',
+                                             'RMSE Mean',
+                                             'RMSE StD',
+                                             'MASE Mean',
+                                             'MASE StD',
+                                             'NRMSE Mean',
+                                             'NRMSE StD'])
+
+    # Save results to a csv file
+    glass_ff_results.to_csv('C:/Users/jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/glass_ff_cv_results.csv', index=False)
 
     print("Complete\n")
 
