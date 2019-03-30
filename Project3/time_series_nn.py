@@ -15,7 +15,7 @@ NUM_FOLDS = 5  # Number of folds used in k-fold cross validation
 NUM_MEASURES = 3  # Number of performance measures calculated (RMSE, MASE, NMSE)
 
 # Neural network
-NUM_EPOCHS = 10000  # Number of epochs of training for the ANN
+NUM_EPOCHS = 1000  # Number of epochs of training for the ANN
 ERR_THRESHOLD = 1e-6  # Maximum error change required to stop the training early
 PATIENCE = 0  # Number of epochs with no improvement after which the training will be stopped
 EARLY_STOPPING = [tf.keras.callbacks.EarlyStopping(monitor='loss',  # Early stopping callback function
@@ -26,11 +26,11 @@ EARLY_STOPPING = [tf.keras.callbacks.EarlyStopping(monitor='loss',  # Early stop
 # Hyperparameters
 NUM_PARAM = 4  # Number of parameters we are optimizing (# units, # layers, learning rate, learning momentum)
 MAX_LAYERS = 1  # Maximum number of hidden layers
-MAX_UNITS = 8  # Maximum number of units per hidden layer
+MAX_UNITS = 5  # Maximum number of units per hidden layer
 #LEARNING_RATE = np.linspace(0, 1, num=51)  # Learning rate
 #LEARNING_MOMENTUM = np.linspace(0, 1, num=51)  # Learning momentum
-LEARNING_RATE = np.array([0.1])
-LEARNING_MOMENTUM = np.array([0.9])
+LEARNING_RATE = np.array([0.1, 0.9])
+LEARNING_MOMENTUM = np.array([0.8, 0.9])
 
 
 def build_ff_nn(input_dim, learning_rate, learning_momentum, num_layers, num_units):
@@ -65,7 +65,7 @@ def build_ff_nn(input_dim, learning_rate, learning_momentum, num_layers, num_uni
     return mlp
 
 
-def param_cv(lm, max_units, max_layers, learning_rate, train_data, train_targets):
+def param_cv(lm, max_units, max_layers, learning_rate, train_data, train_targets, target_mean, target_std):
     """
     Performs k-fold cross validation and calculates performance measures for the input number of units with all possible
     combinations of the other parameters.  Defined in a function to parallelize over learning momentum
@@ -77,6 +77,8 @@ def param_cv(lm, max_units, max_layers, learning_rate, train_data, train_targets
         learning_rate (float np.ndarray): Array of possible learning rate values
         train_data (pd.DataFrame): Training data
         train_targets (pd.Series): Training targets
+        target_mean (float np.ndarray): Mean of the targets used in normalization of the data set
+        target_std (float np.ndarray): Standard deviation of the targets used in normalization of the data set
     Returns:
          results (float np.ndarray): Array of input parameters and their corresponding results
     """
@@ -124,20 +126,15 @@ def param_cv(lm, max_units, max_layers, learning_rate, train_data, train_targets
                             verbose=False,
                             callbacks=EARLY_STOPPING)
 
-                    # Evaluate and predict test fold data
-                    mse = mlp.evaluate(test_fold, test_fold_targets)[0]
+                    # Predict test fold data
                     test_fold_pred = mlp.predict(test_fold)
 
-                    # Calculate performance measures
-                    rmse = np.sqrt(mse)
-                    
-                    std_targets = np.std(test_fold_targets)
-                    nmse = mse / (std_targets ** 2)
+                    # Inverse normalize the test predictions and targets
+                    test_fold_pred = target_std*test_fold_pred + target_mean
+                    test_fold_targets = target_std*test_fold_targets + target_mean
 
-                    diff_targets = np.zeros((1, len(test_fold)-1))  # Differences between two adjacent targets
-                    for l in range(len(diff_targets)):
-                        diff_targets[l] = np.abs(test_fold_targets.iloc[l+1] - test_fold_targets.iloc[l])
-                    mase = mse / (np.sum(diff_targets)/(len(test_fold)-1))
+                    # Calculate performance measures
+                    (rmse, nmse, mase) = calc_performance(test_fold_targets, test_fold_pred)
 
                     # Add them to the results data frame
                     cv_measures = cv_measures.append(pd.Series(np.concatenate((rmse, nmse, mase), axis=None), index=cv_measures.columns), ignore_index=True)
@@ -157,6 +154,21 @@ def param_cv(lm, max_units, max_layers, learning_rate, train_data, train_targets
     return results
 
 
+def calc_performance(targets, pred_outputs):
+    mse = np.sum((np.ravel(targets) - np.ravel(pred_outputs)) ** 2) / len(targets)
+
+    rmse = np.sqrt(mse)
+
+    std_targets = np.std(targets)
+    nmse = mse / (std_targets ** 2)
+
+    diff_targets = np.zeros((1, len(targets) - 1))  # Differences between two adjacent targets
+    for l in range(len(diff_targets)):
+        diff_targets[l] = np.abs(targets.iloc[l + 1] - targets.iloc[l])
+    mase = mse / (np.sum(diff_targets) / (len(targets) - 1))
+    return (rmse, nmse, mase)
+
+
 def training_curve(lr, lm, num_layers, num_units, train_data, train_targets, num_epochs):
     # Build and train the MLP
     mlp = build_ff_nn(len(train_data.keys()), lr, lm, num_layers, num_units)
@@ -164,8 +176,9 @@ def training_curve(lr, lm, num_layers, num_units, train_data, train_targets, num
                       train_targets,
                       epochs=num_epochs,
                       verbose=False)
+    mse_curve = history.history['loss']
     tf.keras.backend.clear_session()  # Destroy current TF graph to prevent cluttering from old models
-    return history.history['loss']
+    return mse_curve
 
 
 def plot_training_curves(lr, lm, num_layers, max_units, train_data, train_targets, num_epochs):
@@ -184,17 +197,23 @@ def plot_training_curves(lr, lm, num_layers, max_units, train_data, train_target
 
 
 def main():
+    matplotlib.rcParams.update({'font.size': 30})
+
     # Set random seed for testing consistency
     random.seed(0)
     tf.set_random_seed(0)
 
-    # Import delay embedded glass and laser data sets
+    #== GLASS ==#
+    # Import delay embedded glass data set
     glass_data = pd.read_csv('glass_delay.csv', header=None)
-    laser_data = pd.read_csv('laser_delay.csv', header=None)
+
+    # Normalize glass data set
+    glass_mean = glass_data.mean()
+    glass_std = glass_data.std()
+    glass_data = (glass_data - glass_mean) / glass_std
 
     # Separate target values from the features
     glass_targets = glass_data.pop(glass_data.shape[1]-1)
-    laser_targets = laser_data.pop(laser_data.shape[1]-1)
 
     # Split into training and test data sets using a chronologically ordered single-split
     glass_split = round(TRAIN_FRAC*glass_data.shape[0])
@@ -203,16 +222,6 @@ def main():
     glass_train_targets = glass_targets.iloc[glass_train_data.index]
     glass_test_targets = glass_targets.iloc[glass_test_data.index]
 
-    #plot_training_curves(0.9, 0.1, 1, 8, glass_train_data, glass_train_targets, 10000)
-
-    laser_split = round(TRAIN_FRAC*laser_data.shape[0])
-    laser_train_data = laser_data.iloc[:laser_split, :]
-    laser_test_data = laser_data.drop(laser_train_data.index)
-    laser_train_targets = laser_targets.iloc[laser_train_data.index]
-    laser_test_targets = laser_targets.iloc[laser_test_data.index]
-
-    plot_training_curves(0.9, 0.1, 1, 8, laser_train_data, laser_train_targets, 10000)
-
     # Perform k-fold cross validation for all parameter combinations, parallelizing over the learning momentum
     with Pool(cpu_count()) as pool:
         results = pool.map(partial(param_cv,
@@ -220,7 +229,9 @@ def main():
                                    max_layers=MAX_LAYERS,
                                    learning_rate=LEARNING_RATE,
                                    train_data=glass_train_data,
-                                   train_targets=glass_train_targets),
+                                   train_targets=glass_train_targets,
+                                   target_mean=glass_mean[len(glass_mean)-1],
+                                   target_std=glass_std[len(glass_std)-1]),
                            LEARNING_MOMENTUM)
 
     # Convert array of results to a DataFrame
@@ -233,12 +244,84 @@ def main():
                                              'RMSE StD',
                                              'MASE Mean',
                                              'MASE StD',
-                                             'NRMSE Mean',
-                                             'NRMSE StD'])
+                                             'NMSE Mean',
+                                             'NMSE StD'])
 
-    # Save results to a csv file
+    # Save glass results to a csv file
     glass_ff_results.to_csv('C:/Users/jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/glass_ff_cv_results.csv', index=False)
 
+    rmse_ind = glass_ff_results['RMSE Mean'].idxmin(axis=1)
+    mase_ind = glass_ff_results['MASE Mean'].idxmin(axis=1)
+    nmse_ind = glass_ff_results['NMSE Mean'].idxmin(axis=1)
+
+    # Find optimal combination of parameters
+    perform_ind = np.array([rmse_ind, mase_ind, nmse_ind])
+    temp = 0
+    for i in range(len(perform_ind)):
+        num_agree = np.sum(perform_ind == perform_ind[i])
+        if (num_agree > temp):
+            temp = num_agree
+            opt_index = perform_ind[i]
+            if (num_agree == len(perform_ind)):  # All measures are minimized with the same network configuration
+                break
+
+    glass_opt_units = int(glass_ff_results['Number of units'].iloc[opt_index])
+    glass_opt_layers = int(glass_ff_results['Number of layers'].iloc[opt_index])
+    glass_opt_lr = glass_ff_results['Learning rate'].iloc[opt_index]
+    glass_opt_lm = glass_ff_results['Learning momentum'].iloc[opt_index]
+
+    # Build and train the optimal FF NN with the optimal parameters
+    opt_ff_nn = build_ff_nn(len(glass_train_data.keys()), glass_opt_lr, glass_opt_lm, glass_opt_layers, glass_opt_units)
+    opt_ff_nn.fit(glass_train_data.values, glass_train_targets, epochs=NUM_EPOCHS)
+
+    # Evaluate performance of the model
+    glass_test_pred = opt_ff_nn.predict(glass_test_data.values)
+
+    (glass_rmse, glass_nmse, glass_mase) = calc_performance(glass_test_targets, glass_test_pred)
+    glass_test_vector = np.concatenate((glass_opt_units, glass_opt_layers, glass_opt_lr, glass_opt_lm, glass_rmse, glass_nmse, glass_mase), axis=None)
+    glass_test_results = pd.DataFrame(data=[glass_test_vector],
+                                      columns=['num_units',
+                                               'num_layers',
+                                               'learning_rate',
+                                               'learning_momentum',
+                                               'RMSE',
+                                               'NMSE',
+                                               'MASE'])
+    glass_test_results.to_csv('C:/Users/jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/glass_test_results.csv', index=False)
+
+    # Inverse normalize the test predictions and targets
+    glass_test_pred = glass_std[len(glass_std)-1]*glass_test_pred + glass_mean[len(glass_mean)-1]
+    glass_test_targets = glass_std[len(glass_std)-1]*glass_test_targets + glass_mean[len(glass_mean)-1]
+
+    # Plot predicted outputs overlayed with the targets
+    time = range(len(glass_test_pred))
+    plt.figure(figsize=(18.5, 10.5))
+    plt.plot(time, glass_test_pred, label='Predicted')
+    plt.plot(time, glass_test_targets, label='Actual')
+    plt.xlabel('Data Point')
+    plt.ylabel('Value')
+    plt.title('Glass Test Results')
+    plt.legend()
+    plt.savefig('C:/Users/Jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/glass_test_results.svg')
+
+    #== LASER ==#
+    # Import delay embedded laser data set
+    laser_data = pd.read_csv('laser_delay.csv', header=None)
+
+    # Normalize laser data set
+    laser_mean = laser_data.mean()
+    laser_std = laser_data.std()
+    laser_data = (laser_data - laser_mean) / laser_std
+
+    # Separate target values from the features
+    laser_targets = laser_data.pop(laser_data.shape[1]-1)
+
+    # Split into training and test data sets using a chronologically ordered single-split
+    laser_split = round(TRAIN_FRAC*laser_data.shape[0])
+    laser_train_data = laser_data.iloc[:laser_split, :]
+    laser_test_data = laser_data.drop(laser_train_data.index)
+    laser_train_targets = laser_targets.iloc[laser_train_data.index]
+    laser_test_targets = laser_targets.iloc[laser_test_data.index]
     print("Complete\n")
 
 
