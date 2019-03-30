@@ -25,12 +25,10 @@ EARLY_STOPPING = [tf.keras.callbacks.EarlyStopping(monitor='loss',  # Early stop
 
 # Hyperparameters
 NUM_PARAM = 4  # Number of parameters we are optimizing (# units, # layers, learning rate, learning momentum)
-MAX_LAYERS = 1  # Maximum number of hidden layers
-MAX_UNITS = 5  # Maximum number of units per hidden layer
-#LEARNING_RATE = np.linspace(0, 1, num=51)  # Learning rate
-#LEARNING_MOMENTUM = np.linspace(0, 1, num=51)  # Learning momentum
-LEARNING_RATE = np.array([0.1, 0.9])
-LEARNING_MOMENTUM = np.array([0.8, 0.9])
+MAX_LAYERS = 2  # Maximum number of hidden layers
+MAX_UNITS = 10  # Maximum number of units per hidden layer
+LEARNING_RATE = np.linspace(0, 1, num=51)  # Learning rate
+LEARNING_MOMENTUM = np.linspace(0, 1, num=51)  # Learning momentum
 
 
 def build_ff_nn(input_dim, learning_rate, learning_momentum, num_layers, num_units):
@@ -322,6 +320,90 @@ def main():
     laser_test_data = laser_data.drop(laser_train_data.index)
     laser_train_targets = laser_targets.iloc[laser_train_data.index]
     laser_test_targets = laser_targets.iloc[laser_test_data.index]
+
+
+    # Perform k-fold cross validation for all parameter combinations, parallelizing over the learning momentum
+    with Pool(cpu_count()) as pool:
+        results = pool.map(partial(param_cv,
+                                   max_units=MAX_UNITS,
+                                   max_layers=MAX_LAYERS,
+                                   learning_rate=LEARNING_RATE,
+                                   train_data=laser_train_data,
+                                   train_targets=laser_train_targets,
+                                   target_mean=laser_mean[len(laser_mean)-1],
+                                   target_std=laser_std[len(laser_std)-1]),
+                           LEARNING_MOMENTUM)
+
+    # Convert array of results to a DataFrame
+    laser_ff_results = pd.DataFrame(data=np.vstack(results),
+                                    columns=['Number of units',
+                                             'Number of layers',
+                                             'Learning rate',
+                                             'Learning momentum',
+                                             'RMSE Mean',
+                                             'RMSE StD',
+                                             'MASE Mean',
+                                             'MASE StD',
+                                             'NMSE Mean',
+                                             'NMSE StD'])
+
+    # Save laser results to a csv file
+    laser_ff_results.to_csv('C:/Users/jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/laser_ff_cv_results.csv', index=False)
+
+    rmse_ind = laser_ff_results['RMSE Mean'].idxmin(axis=1)
+    mase_ind = laser_ff_results['MASE Mean'].idxmin(axis=1)
+    nmse_ind = laser_ff_results['NMSE Mean'].idxmin(axis=1)
+
+    # Find optimal combination of parameters
+    perform_ind = np.array([rmse_ind, mase_ind, nmse_ind])
+    temp = 0
+    for i in range(len(perform_ind)):
+        num_agree = np.sum(perform_ind == perform_ind[i])
+        if (num_agree > temp):
+            temp = num_agree
+            opt_index = perform_ind[i]
+            if (num_agree == len(perform_ind)):  # All measures are minimized with the same network configuration
+                break
+
+    laser_opt_units = int(laser_ff_results['Number of units'].iloc[opt_index])
+    laser_opt_layers = int(laser_ff_results['Number of layers'].iloc[opt_index])
+    laser_opt_lr = laser_ff_results['Learning rate'].iloc[opt_index]
+    laser_opt_lm = laser_ff_results['Learning momentum'].iloc[opt_index]
+
+    # Build and train the optimal FF NN with the optimal parameters
+    opt_ff_nn = build_ff_nn(len(laser_train_data.keys()), laser_opt_lr, laser_opt_lm, laser_opt_layers, laser_opt_units)
+    opt_ff_nn.fit(laser_train_data.values, laser_train_targets, epochs=NUM_EPOCHS)
+
+    # Evaluate performance of the model
+    laser_test_pred = opt_ff_nn.predict(laser_test_data.values)
+
+    (laser_rmse, laser_nmse, laser_mase) = calc_performance(laser_test_targets, laser_test_pred)
+    laser_test_vector = np.concatenate((laser_opt_units, laser_opt_layers, laser_opt_lr, laser_opt_lm, laser_rmse, laser_nmse, laser_mase), axis=None)
+    laser_test_results = pd.DataFrame(data=[laser_test_vector],
+                                      columns=['num_units',
+                                               'num_layers',
+                                               'learning_rate',
+                                               'learning_momentum',
+                                               'RMSE',
+                                               'NMSE',
+                                               'MASE'])
+    laser_test_results.to_csv('C:/Users/jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/laser_test_results.csv', index=False)
+
+    # Inverse normalize the test predictions and targets
+    laser_test_pred = laser_std[len(laser_std)-1]*laser_test_pred + laser_mean[len(laser_mean)-1]
+    laser_test_targets = laser_std[len(laser_std)-1]*laser_test_targets + laser_mean[len(laser_mean)-1]
+
+    # Plot predicted outputs overlayed with the targets
+    time = range(len(laser_test_pred))
+    plt.figure(figsize=(18.5, 10.5))
+    plt.plot(time, laser_test_pred, label='Predicted')
+    plt.plot(time, laser_test_targets, label='Actual')
+    plt.xlabel('Data Point')
+    plt.ylabel('Value')
+    plt.title('Laser Test Results')
+    plt.legend()
+    plt.savefig('C:/Users/Jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/laser_test_results.svg')
+    plt.show()
     print("Complete\n")
 
 
