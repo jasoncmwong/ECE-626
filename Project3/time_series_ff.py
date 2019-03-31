@@ -33,9 +33,9 @@ LEARNING_MOMENTUM = np.linspace(0, 1, num=51)  # Learning momentum
 
 def build_ff_nn(input_dim, learning_rate, learning_momentum, num_layers, num_units):
     """
-    Builds an feedforward neural network using non-stochastic gradient descent optimization with momentum.  A mean
+    Builds a feedforward neural network using non-stochastic gradient descent optimization with momentum.  A mean
     squared error function is used as a loss function.  Hidden layers use a sigmoidal activation function and
-    output layers use a softmax activation function.
+    output layers use a linear activation function.
     Args:
         input_dim (int): The dimension of an input vector to the network
         learning_rate (float): The learning rate (step size)
@@ -153,6 +153,15 @@ def param_cv(lm, max_units, max_layers, learning_rate, train_data, train_targets
 
 
 def calc_performance(targets, pred_outputs):
+    """
+    Calculates the root mean squared error (RMSE), normalized mean squared error (NMSE), and mean absolute scaled error (MASE)
+
+    Args:
+        targets (float np.ndarray): The true targets for each input vector
+        pred_outputs (pd.Series): The predicted outputs for each input vector
+    Returns:
+         results (float np.ndarray): Array of input parameters and their corresponding results
+    """
     mse = np.sum((np.ravel(targets) - np.ravel(pred_outputs)) ** 2) / len(targets)
 
     rmse = np.sqrt(mse)
@@ -168,6 +177,20 @@ def calc_performance(targets, pred_outputs):
 
 
 def training_curve(lr, lm, num_layers, num_units, train_data, train_targets, num_epochs):
+    """
+    Trains an RNN with the given parameters to observe how the mean squared error changes over time.
+
+    Args:
+        lr (float): Learning rate
+        lm (float): Learning momentum
+        num_layers (int): Number of hidden layers
+        num_units (int): Number of units in each hidden layer
+        train_data (pd.DataFrame): Training data
+        train_targets (pd.Series): Training targets
+        num_epochs (int): Number of epochs to train for
+    Returns:
+         mse_curve (float np.ndarray): Mean squared error as a function of epochs
+    """
     # Build and train the MLP
     mlp = build_ff_nn(len(train_data.keys()), lr, lm, num_layers, num_units)
     history = mlp.fit(train_data.values,
@@ -180,6 +203,20 @@ def training_curve(lr, lm, num_layers, num_units, train_data, train_targets, num
 
 
 def plot_training_curves(lr, lm, num_layers, max_units, train_data, train_targets, num_epochs):
+    """
+    Trains multiple RNNs over a various number of hidden units and plots their training error curves.
+
+    Args:
+        lr (float): Learning rate
+        lm (float): Learning momentum
+        num_layers (int): Number of hidden layers
+        max_units (int): Maximum number of units for each hidden layer
+        train_data (pd.DataFrame): Training data
+        train_targets (pd.Series): Training targets
+        num_epochs (int): Number of epochs to train for
+    Returns:
+         mse_curve (float np.ndarray): Mean squared error as a function of epochs
+    """
     matplotlib.rcParams.update({'font.size': 30})
 
     # Get training curves for constant learning rate, learning momentum, number of layers, but variable number of units
