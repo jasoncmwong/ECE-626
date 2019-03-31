@@ -1,0 +1,2 @@
+num_units,num_layers,learning_rate,learning_momentum,RMSE,NMSE,MASE
+8.0,2.0,0.16,0.92,0.17054328874274416,0.046239890755246114,0.2275178074801369

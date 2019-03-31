@@ -285,7 +285,7 @@ def main():
                                                'RMSE',
                                                'NMSE',
                                                'MASE'])
-    glass_test_results.to_csv('C:/Users/jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/glass_test_results.csv', index=False)
+    glass_test_results.to_csv('C:/Users/jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/glass_ff_test_results.csv', index=False)
 
     # Inverse normalize the test predictions and targets
     glass_test_pred = glass_std[len(glass_std)-1]*glass_test_pred + glass_mean[len(glass_mean)-1]
@@ -300,7 +300,7 @@ def main():
     plt.ylabel('Value')
     plt.title('Glass Test Results')
     plt.legend()
-    plt.savefig('C:/Users/Jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/glass_test_results.svg')
+    plt.savefig('C:/Users/Jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/glass_ff_test_results.svg')
 
     #== LASER ==#
     # Import delay embedded laser data set
@@ -387,7 +387,7 @@ def main():
                                                'RMSE',
                                                'NMSE',
                                                'MASE'])
-    laser_test_results.to_csv('C:/Users/jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/laser_test_results.csv', index=False)
+    laser_test_results.to_csv('C:/Users/jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/laser_ff_test_results.csv', index=False)
 
     # Inverse normalize the test predictions and targets
     laser_test_pred = laser_std[len(laser_std)-1]*laser_test_pred + laser_mean[len(laser_mean)-1]
@@ -402,7 +402,7 @@ def main():
     plt.ylabel('Value')
     plt.title('Laser Test Results')
     plt.legend()
-    plt.savefig('C:/Users/Jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/laser_test_results.svg')
+    plt.savefig('C:/Users/Jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/laser_ff_test_results.svg')
     plt.show()
     print("Complete\n")
 
