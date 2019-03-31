@@ -27,11 +27,8 @@ EARLY_STOPPING = [tf.keras.callbacks.EarlyStopping(monitor='loss',  # Early stop
 NUM_PARAM = 4  # Number of parameters we are optimizing (# units, # layers, learning rate, learning momentum)
 MAX_LAYERS = 2  # Maximum number of hidden layers
 MAX_UNITS = 10  # Maximum number of units per hidden layer
-#LEARNING_RATE = np.linspace(0, 1, num=51)  # Learning rate
-#LEARNING_MOMENTUM = np.linspace(0, 1, num=51)  # Learning momentum
-
-LEARNING_RATE = np.array([0.1, 0.9])
-LEARNING_MOMENTUM = np.array([0.8, 0.9])
+LEARNING_RATE = np.linspace(0, 1, num=51)  # Learning rate
+LEARNING_MOMENTUM = np.linspace(0, 1, num=51)  # Learning momentum
 
 
 def build_r_nn(input_dim, learning_rate, learning_momentum, num_layers, num_units):
@@ -51,7 +48,7 @@ def build_r_nn(input_dim, learning_rate, learning_momentum, num_layers, num_unit
     mlp = tf.keras.Sequential()
 
     # Initialize MLP with one hidden layer
-    mlp.add(tf.keras.layers.SimpleRNN(num_units, activation=tf.math.sigmoid, input_shape=[input_dim]))
+    mlp.add(tf.keras.layers.SimpleRNN(num_units, activation=tf.math.sigmoid, input_shape=(1, input_dim), return_sequences=True))
 
     # Add more hidden layers
     for i in range(num_layers-1):
@@ -119,9 +116,16 @@ def param_cv(lm, max_units, max_layers, learning_rate, train_data, train_targets
                     test_fold = train_data.iloc[test_indices]
                     test_fold_targets = train_targets.iloc[test_indices]
 
+                    # Reshape inputs to fit RNN specifications
+                    train_fold = np.array(train_fold)
+                    train_fold = train_fold.reshape((train_fold.shape[0], 1, train_fold.shape[1]))
+
+                    test_fold = np.array(test_fold)
+                    test_fold = test_fold.reshape((test_fold.shape[0], 1, test_fold.shape[1]))
+
                     # Build and train the MLP
                     mlp = build_r_nn(len(train_data.keys()), lr, lm, num_layers, num_units)
-                    mlp.fit(train_fold.values,
+                    mlp.fit(train_fold,
                             train_fold_targets,
                             epochs=NUM_EPOCHS,
                             verbose=False,
@@ -196,7 +200,9 @@ def training_curve(lr, lm, num_layers, num_units, train_data, train_targets, num
     """
     # Build and train the MLP
     mlp = build_r_nn(len(train_data.keys()), lr, lm, num_layers, num_units)
-    history = mlp.fit(train_data.values,
+    train_data = np.array(train_data)
+    train_data = train_data.reshape((train_data.shape[0], 1, train_data.shape[1]))
+    history = mlp.fit(train_data,
                       train_targets,
                       epochs=num_epochs,
                       verbose=False)
@@ -273,17 +279,17 @@ def main():
                            LEARNING_MOMENTUM)
 
     # Convert array of results to a DataFrame
-    glass_r_results = pd.DataFrame(data=np.vstack(results),
-                                    columns=['Number of units',
-                                             'Number of layers',
-                                             'Learning rate',
-                                             'Learning momentum',
-                                             'RMSE Mean',
-                                             'RMSE StD',
-                                             'MASE Mean',
-                                             'MASE StD',
-                                             'NMSE Mean',
-                                             'NMSE StD'])
+    glass_r_results=pd.DataFrame(data=np.vstack(results),
+                                columns=['Number of units',
+                                         'Number of layers',
+                                         'Learning rate',
+                                         'Learning momentum',
+                                         'RMSE Mean',
+                                         'RMSE StD',
+                                         'MASE Mean',
+                                         'MASE StD',
+                                         'NMSE Mean',
+                                         'NMSE StD'])
 
     # Save glass results to a csv file
     glass_r_results.to_csv('C:/Users/jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/glass_r_cv_results.csv', index=False)
@@ -308,12 +314,21 @@ def main():
     glass_opt_lr = glass_r_results['Learning rate'].iloc[opt_index]
     glass_opt_lm = glass_r_results['Learning momentum'].iloc[opt_index]
 
-    # Build and train the optimal  RNN with the optimal parameters
+    # Build RNN with the optimal parameters
     opt_r_nn = build_r_nn(len(glass_train_data.keys()), glass_opt_lr, glass_opt_lm, glass_opt_layers, glass_opt_units)
-    opt_r_nn.fit(glass_train_data.values, glass_train_targets, epochs=NUM_EPOCHS)
+
+    # Reshape inputs to fit RNN specifications
+    glass_train_data = np.array(glass_train_data)
+    glass_train_data = glass_train_data.reshape((glass_train_data.shape[0], 1, glass_train_data.shape[1]))
+
+    glass_test_data = np.array(glass_test_data)
+    glass_test_data = glass_test_data.reshape((glass_test_data.shape[0], 1, glass_test_data.shape[1]))
+
+    # Train the optimal RNN
+    opt_r_nn.fit(glass_train_data, glass_train_targets, epochs=NUM_EPOCHS)
 
     # Evaluate performance of the model
-    glass_test_pred = opt_r_nn.predict(glass_test_data.values)
+    glass_test_pred = opt_r_nn.predict(glass_test_data)
 
     (glass_rmse, glass_nmse, glass_mase) = calc_performance(glass_test_targets, glass_test_pred)
     glass_test_vector = np.concatenate((glass_opt_units, glass_opt_layers, glass_opt_lr, glass_opt_lm, glass_rmse, glass_nmse, glass_mase), axis=None)
@@ -360,7 +375,6 @@ def main():
     laser_test_data = laser_data.drop(laser_train_data.index)
     laser_train_targets = laser_targets.iloc[laser_train_data.index]
     laser_test_targets = laser_targets.iloc[laser_test_data.index]
-
 
     # Perform k-fold cross validation for all parameter combinations, parallelizing over the learning momentum
     with Pool(cpu_count()) as pool:
@@ -412,10 +426,18 @@ def main():
 
     # Build and train the optimal RNN with the optimal parameters
     opt_r_nn = build_r_nn(len(laser_train_data.keys()), laser_opt_lr, laser_opt_lm, laser_opt_layers, laser_opt_units)
-    opt_r_nn.fit(laser_train_data.values, laser_train_targets, epochs=NUM_EPOCHS)
+
+    # Reshape inputs to fit RNN specifications
+    laser_train_data = np.array(laser_train_data)
+    laser_train_data = laser_train_data.reshape((laser_train_data.shape[0], 1, laser_train_data.shape[1]))
+
+    laser_test_data = np.array(laser_test_data)
+    laser_test_data = laser_test_data.reshape((laser_test_data.shape[0], 1, laser_test_data.shape[1]))
+
+    opt_r_nn.fit(laser_train_data, laser_train_targets, epochs=NUM_EPOCHS)
 
     # Evaluate performance of the model
-    laser_test_pred = opt_r_nn.predict(laser_test_data.values)
+    laser_test_pred = opt_r_nn.predict(laser_test_data)
 
     (laser_rmse, laser_nmse, laser_mase) = calc_performance(laser_test_targets, laser_test_pred)
     laser_test_vector = np.concatenate((laser_opt_units, laser_opt_layers, laser_opt_lr, laser_opt_lm, laser_rmse, laser_nmse, laser_mase), axis=None)
