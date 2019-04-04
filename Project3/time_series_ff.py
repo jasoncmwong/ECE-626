@@ -43,7 +43,7 @@ def build_ff_nn(input_dim, learning_rate, learning_momentum, num_layers, num_uni
         num_layers (int): The number of hidden layers (must be positive)
         num_units (int): The number of units in each hidden layer (must be positive)
     Returns:
-        mlp (tf.keras.Sequential): The MLP classifier model
+        mlp (tf.keras.Sequential): The MLP regression model
     """
     mlp = tf.keras.Sequential()
 
@@ -169,7 +169,7 @@ def calc_performance(targets, pred_outputs):
     std_targets = np.std(targets)
     nmse = mse / (std_targets ** 2)
 
-    diff_targets = np.zeros((1, len(targets) - 1))  # Differences between two adjacent targets
+    diff_targets = np.zeros(len(targets)-1)  # Differences between two adjacent targets
     for l in range(len(diff_targets)):
         diff_targets[l] = np.abs(targets.iloc[l + 1] - targets.iloc[l])
     mase = mse / (np.sum(diff_targets) / (len(targets) - 1))
@@ -336,7 +336,7 @@ def main():
     plt.plot(time, glass_test_targets, label='Actual')
     plt.xlabel('Data Point')
     plt.ylabel('Value')
-    plt.title('Glass Test Results')
+    plt.title('Mackey-Glass Test Results for FFNN')
     plt.legend()
     plt.savefig('C:/Users/Jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/glass_ff_test_results.svg')
 
@@ -439,7 +439,7 @@ def main():
     plt.plot(time, laser_test_targets, label='Actual')
     plt.xlabel('Data Point')
     plt.ylabel('Value')
-    plt.title('Laser Test Results')
+    plt.title('Santa Fe Laser Test Results for FFNN')
     plt.legend()
     plt.savefig('C:/Users/Jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/laser_ff_test_results.svg')
     plt.show()

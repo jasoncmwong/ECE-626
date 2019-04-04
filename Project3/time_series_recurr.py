@@ -43,24 +43,24 @@ def build_r_nn(input_dim, learning_rate, learning_momentum, num_layers, num_unit
         num_layers (int): The number of hidden layers (must be positive)
         num_units (int): The number of units in each hidden layer (must be positive)
     Returns:
-        mlp (tf.keras.Sequential): The MLP classifier model
+        rnn (tf.keras.Sequential): The RNN regression model
     """
-    mlp = tf.keras.Sequential()
+    rnn = tf.keras.Sequential()
 
-    # Initialize MLP with one hidden layer
-    mlp.add(tf.keras.layers.SimpleRNN(num_units, activation=tf.math.sigmoid, input_shape=(1, input_dim), return_sequences=True))
+    # Initialize RNN with one hidden layer
+    rnn.add(tf.keras.layers.SimpleRNN(num_units, activation=tf.math.sigmoid, input_shape=(1, input_dim), return_sequences=True))
 
     # Add more hidden layers
     for i in range(num_layers-1):
-        mlp.add(tf.keras.layers.SimpleRNN(num_units, activation=tf.math.sigmoid))
+        rnn.add(tf.keras.layers.SimpleRNN(num_units, activation=tf.math.sigmoid))
 
     # Add output layer
-    mlp.add(tf.keras.layers.Dense(1, activation=tf.keras.activations.linear))
+    rnn.add(tf.keras.layers.Dense(1, activation=tf.keras.activations.linear))
 
-    mlp.compile(optimizer=tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=learning_momentum),
+    rnn.compile(optimizer=tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=learning_momentum),
                 loss='mse',
                 metrics=['mse'])
-    return mlp
+    return rnn
 
 
 def param_cv(lm, max_units, max_layers, learning_rate, train_data, train_targets, target_mean, target_std):
@@ -123,16 +123,16 @@ def param_cv(lm, max_units, max_layers, learning_rate, train_data, train_targets
                     test_fold = np.array(test_fold)
                     test_fold = test_fold.reshape((test_fold.shape[0], 1, test_fold.shape[1]))
 
-                    # Build and train the MLP
-                    mlp = build_r_nn(len(train_data.keys()), lr, lm, num_layers, num_units)
-                    mlp.fit(train_fold,
+                    # Build and train the RNN
+                    rnn = build_r_nn(len(train_data.keys()), lr, lm, num_layers, num_units)
+                    rnn.fit(train_fold,
                             train_fold_targets,
                             epochs=NUM_EPOCHS,
                             verbose=False,
                             callbacks=EARLY_STOPPING)
 
                     # Predict test fold data
-                    test_fold_pred = mlp.predict(test_fold)
+                    test_fold_pred = rnn.predict(test_fold)
 
                     # Inverse normalize the test predictions and targets
                     test_fold_pred = target_std*test_fold_pred + target_mean
@@ -176,7 +176,7 @@ def calc_performance(targets, pred_outputs):
     std_targets = np.std(targets)
     nmse = mse / (std_targets ** 2)
 
-    diff_targets = np.zeros((1, len(targets) - 1))  # Differences between two adjacent targets
+    diff_targets = np.zeros(len(targets)-1)  # Differences between two adjacent targets
     for l in range(len(diff_targets)):
         diff_targets[l] = np.abs(targets.iloc[l + 1] - targets.iloc[l])
     mase = mse / (np.sum(diff_targets) / (len(targets) - 1))
@@ -198,11 +198,11 @@ def training_curve(lr, lm, num_layers, num_units, train_data, train_targets, num
     Returns:
          mse_curve (float np.ndarray): Mean squared error as a function of epochs
     """
-    # Build and train the MLP
-    mlp = build_r_nn(len(train_data.keys()), lr, lm, num_layers, num_units)
+    # Build and train the RNN
+    rnn = build_r_nn(len(train_data.keys()), lr, lm, num_layers, num_units)
     train_data = np.array(train_data)
     train_data = train_data.reshape((train_data.shape[0], 1, train_data.shape[1]))
-    history = mlp.fit(train_data,
+    history = rnn.fit(train_data,
                       train_targets,
                       epochs=num_epochs,
                       verbose=False)
@@ -354,7 +354,7 @@ def main():
     plt.plot(time, glass_test_targets, label='Actual')
     plt.xlabel('Data Point')
     plt.ylabel('Value')
-    plt.title('Glass Test Results')
+    plt.title('Mackey-Glass Test Results for RNN')
     plt.legend()
     plt.savefig('C:/Users/Jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/glass_r_test_results.svg')
 
@@ -464,7 +464,7 @@ def main():
     plt.plot(time, laser_test_targets, label='Actual')
     plt.xlabel('Data Point')
     plt.ylabel('Value')
-    plt.title('Laser Test Results')
+    plt.title('Santa Fe Laser Test Results for RNN')
     plt.legend()
     plt.savefig('C:/Users/Jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/laser_r_test_results.svg')
     plt.show()
