@@ -312,6 +312,11 @@ def main():
     # Evaluate performance of the model
     glass_test_pred = opt_ff_nn.predict(glass_test_data.values)
 
+    # Inverse normalize the test predictions and targets
+    glass_test_pred = glass_std[len(glass_std)-1]*glass_test_pred + glass_mean[len(glass_mean)-1]
+    glass_test_targets = glass_std[len(glass_std)-1]*glass_test_targets + glass_mean[len(glass_mean)-1]
+
+    # Calculate performance measures for the out-of-sample test set
     (glass_rmse, glass_nmse, glass_mase) = calc_performance(glass_test_targets, glass_test_pred)
     glass_test_vector = np.concatenate((glass_opt_units, glass_opt_layers, glass_opt_lr, glass_opt_lm, glass_rmse, glass_nmse, glass_mase), axis=None)
     glass_test_results = pd.DataFrame(data=[glass_test_vector],
@@ -323,10 +328,6 @@ def main():
                                                'NMSE',
                                                'MASE'])
     glass_test_results.to_csv('C:/Users/jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/glass_ff_test_results.csv', index=False)
-
-    # Inverse normalize the test predictions and targets
-    glass_test_pred = glass_std[len(glass_std)-1]*glass_test_pred + glass_mean[len(glass_mean)-1]
-    glass_test_targets = glass_std[len(glass_std)-1]*glass_test_targets + glass_mean[len(glass_mean)-1]
 
     # Plot predicted outputs overlayed with the targets
     time = range(len(glass_test_pred))
@@ -414,6 +415,11 @@ def main():
     # Evaluate performance of the model
     laser_test_pred = opt_ff_nn.predict(laser_test_data.values)
 
+    # Inverse normalize the test predictions and targets
+    laser_test_pred = laser_std[len(laser_std)-1]*laser_test_pred + laser_mean[len(laser_mean)-1]
+    laser_test_targets = laser_std[len(laser_std)-1]*laser_test_targets + laser_mean[len(laser_mean)-1]
+
+    # Calculate performance measures for the out-of-sample test set
     (laser_rmse, laser_nmse, laser_mase) = calc_performance(laser_test_targets, laser_test_pred)
     laser_test_vector = np.concatenate((laser_opt_units, laser_opt_layers, laser_opt_lr, laser_opt_lm, laser_rmse, laser_nmse, laser_mase), axis=None)
     laser_test_results = pd.DataFrame(data=[laser_test_vector],
@@ -425,10 +431,6 @@ def main():
                                                'NMSE',
                                                'MASE'])
     laser_test_results.to_csv('C:/Users/jason/Dropbox/University/Grad School/Winter Term/ECE 626/Project 3/laser_ff_test_results.csv', index=False)
-
-    # Inverse normalize the test predictions and targets
-    laser_test_pred = laser_std[len(laser_std)-1]*laser_test_pred + laser_mean[len(laser_mean)-1]
-    laser_test_targets = laser_std[len(laser_std)-1]*laser_test_targets + laser_mean[len(laser_mean)-1]
 
     # Plot predicted outputs overlayed with the targets
     time = range(len(laser_test_pred))
